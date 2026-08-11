@@ -82,31 +82,35 @@
       <div class="sheet-head"><h2>Libri 📚</h2><p class="muted">${current}${target?` / ${target}`:""} letti nel ${new Date().getFullYear()}</p></div>
       <button class="btn btn-primary" id="addBookBtn">+ Aggiungi libro letto</button>
       <div style="display:grid;gap:10px;margin-top:14px">
-        ${books.length?books.map(b=>`<div class="goal-card" data-book="${b.id}"><div style="display:flex;gap:12px">${b.cover?`<img src="${b.cover}" alt="" style="width:72px;height:98px;object-fit:cover;border-radius:10px;background:#eee">`:"<div style='width:72px;height:98px;border-radius:10px;background:#eee8df;display:grid;place-items:center;font-size:28px'>📖</div>"}<div style="flex:1;min-width:0"><div style="font-weight:900">${esc(b.title)}</div><div class="muted small">${esc(b.author||"")}</div><div class="muted tiny" style="margin-top:4px">${b.finishedAt?new Date(b.finishedAt+"T12:00:00").toLocaleDateString("it-IT"):""}</div>${b.comment?`<div style="margin-top:8px;font-size:13px;line-height:1.35">“${esc(b.comment)}”</div>`:""}</div></div><button class="chip deleteBook" style="margin-top:9px">Elimina</button></div>`).join(""):`<div class="empty">Ancora nessun libro registrato.</div>`}
+        ${books.length?books.map(b=>`<div class="goal-card" data-book="${b.id}"><div style="display:flex;gap:12px">${b.cover?`<img src="${b.cover}" alt="" style="width:72px;height:98px;object-fit:cover;border-radius:10px;background:#eee">`:"<div style='width:72px;height:98px;border-radius:10px;background:#eee8df;display:grid;place-items:center;font-size:28px'>📖</div>"}<div style="flex:1;min-width:0"><div style="font-weight:900">${esc(b.title)}</div><div class="muted small">${esc(b.author||"")}</div><div class="muted tiny" style="margin-top:4px">${b.finishedAt?new Date(b.finishedAt+"T12:00:00").toLocaleDateString("it-IT"):""}</div>${b.comment?`<div style="margin-top:8px;font-size:13px;line-height:1.35">“${esc(b.comment)}”</div>`:""}</div></div><div style="display:flex;gap:8px;margin-top:9px"><button class="chip editBook">Modifica</button><button class="chip deleteBook">Elimina</button></div></div>`).join(""):`<div class="empty">Ancora nessun libro registrato.</div>`}
       </div>`);
     $("#addBookBtn")?.addEventListener("click",openAddBook);
+    document.querySelectorAll(".editBook").forEach(btn=>btn.addEventListener("click",e=>{
+      const id=e.target.closest("[data-book]")?.dataset.book; if(id) openEditBook(id);
+    }));
     document.querySelectorAll(".deleteBook").forEach(btn=>btn.addEventListener("click",e=>{
       const id=e.target.closest("[data-book]")?.dataset.book; if(!id)return;
       if(confirm("Eliminare questo libro?")){ const d=load();d.books=(d.books||[]).filter(x=>x.id!==id);save(d);openBooks(); }
     }));
   }
 
-  function openAddBook(){
+  function bookForm({mode="add",book=null}={}){
     const today=new Date().toISOString().slice(0,10);
+    const b=book||{};
     openSheet(`
-      <div class="sheet-head"><h2>Aggiungi libro</h2><p class="muted">Copertina, dati essenziali e una nota tua.</p></div>
+      <div class="sheet-head"><h2>${mode==="edit"?"Modifica libro":"Aggiungi libro"}</h2><p class="muted">Copertina, dati essenziali e una nota tua.</p></div>
       <div class="goal-card">
-        <div class="field"><label>TITOLO</label><input id="bookTitle" type="text" placeholder="Titolo del libro"></div>
-        <div class="field"><label>AUTORE</label><input id="bookAuthor" type="text" placeholder="Autore"></div>
-        <div class="field"><label>FINITO IL</label><input id="bookDate" type="date" value="${today}"></div>
-        <div class="field"><label>COMMENTO</label><textarea id="bookComment" rows="4" placeholder="Cosa ti è rimasto? Una frase, un'idea, un'impressione..."></textarea></div>
-        <div class="field"><label>FOTO COPERTINA</label><input id="bookCover" type="file" accept="image/*"></div>
-        <div id="bookPreview" style="margin-top:8px"></div>
+        <div class="field"><label>TITOLO</label><input id="bookTitle" type="text" value="${esc(b.title||"")}" placeholder="Titolo del libro"></div>
+        <div class="field"><label>AUTORE</label><input id="bookAuthor" type="text" value="${esc(b.author||"")}" placeholder="Autore"></div>
+        <div class="field"><label>FINITO IL</label><input id="bookDate" type="date" value="${b.finishedAt||today}"></div>
+        <div class="field"><label>COMMENTO</label><textarea id="bookComment" rows="4" placeholder="Cosa ti è rimasto? Una frase, un'idea, un'impressione...">${esc(b.comment||"")}</textarea></div>
+        <div class="field"><label>${mode==="edit"?"CAMBIA FOTO COPERTINA":"FOTO COPERTINA"}</label><input id="bookCover" type="file" accept="image/*"></div>
+        <div id="bookPreview" style="margin-top:8px">${b.cover?`<img src="${b.cover}" alt="Anteprima" style="width:90px;height:125px;object-fit:cover;border-radius:12px">`:""}</div>
       </div>
-      <button class="btn btn-primary" id="saveBook" style="margin-top:12px">Salva libro</button>
+      <button class="btn btn-primary" id="saveBook" style="margin-top:12px">${mode==="edit"?"Salva modifiche":"Salva libro"}</button>
       <button class="btn btn-secondary" id="backBooks" style="margin-top:8px">Torna ai libri</button>`);
 
-    let cover="";
+    let cover=b.cover||"";
     $("#bookCover")?.addEventListener("change",async e=>{
       const f=e.target.files?.[0]; if(!f)return;
       try{cover=await resizeImage(f);$("#bookPreview").innerHTML=`<img src="${cover}" alt="Anteprima" style="width:90px;height:125px;object-fit:cover;border-radius:12px">`;}catch{alert("Non riesco a leggere questa immagine.");}
@@ -114,10 +118,22 @@
     $("#saveBook")?.addEventListener("click",()=>{
       const title=$("#bookTitle").value.trim(); if(!title){alert("Inserisci il titolo.");return;}
       const d=load();d.books||=[];
-      d.books.push({id:uid(),title,author:$("#bookAuthor").value.trim(),finishedAt:$("#bookDate").value||today,comment:$("#bookComment").value.trim(),cover,createdAt:new Date().toISOString()});
+      const payload={title,author:$("#bookAuthor").value.trim(),finishedAt:$("#bookDate").value||today,comment:$("#bookComment").value.trim(),cover};
+      if(mode==="edit"){
+        const i=d.books.findIndex(x=>x.id===b.id);
+        if(i!==-1)d.books[i]={...d.books[i],...payload,updatedAt:new Date().toISOString()};
+      }else{
+        d.books.push({id:uid(),...payload,createdAt:new Date().toISOString()});
+      }
       save(d);openBooks();
     });
     $("#backBooks")?.addEventListener("click",openBooks);
+  }
+
+  function openAddBook(){ bookForm({mode:"add"}); }
+  function openEditBook(id){
+    const d=load(); const book=(d.books||[]).find(x=>x.id===id);
+    if(book) bookForm({mode:"edit",book});
   }
 
   document.addEventListener("click",e=>{ if(e.target.closest("#v2save")) saveGoal(); },true);
