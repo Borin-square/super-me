@@ -13,15 +13,22 @@
     const pressure=(data.pressure||[]).filter(x=>sameDay(x.createdAt,key));
     const sport=(data.sport||[]).filter(x=>sameDay(x.createdAt,key));
     const weight=(data.weight||[]).filter(x=>sameDay(x.createdAt,key));
+    const meditation=(data.meditation||[]).filter(x=>sameDay(x.createdAt,key));
     const calories=food.reduce((a,x)=>a+(+x.kcal||0),0);
     const calTarget=num(data.goals?.calories);
     const foodDone=food.length>0 && (!calTarget || Math.abs(calories-calTarget)<=calTarget*.12);
     const pressureDone=pressure.length>0;
     const movementDone=sport.length>0;
     const weightDone=weight.length>0;
+    const meditationMinutes=meditation.reduce((a,x)=>a+(+x.minutes||0),0);
+    const meditationTarget=num(data.goals?.meditationMinutes)||10;
+    const enabledFrom=data.goals?.meditationEnabledFrom||null;
+    const meditationRequired=!!enabledFrom && key>=enabledFrom;
+    const meditationDone=meditationMinutes>=meditationTarget;
     const core=[foodDone,pressureDone];
+    if(meditationRequired)core.push(meditationDone);
     const done=core.filter(Boolean).length;
-    return {foodDone,pressureDone,movementDone,weightDone,done,total:core.length,complete:done===core.length,calories,calTarget};
+    return {foodDone,pressureDone,movementDone,weightDone,meditationDone,meditationMinutes,meditationTarget,done,total:core.length,complete:done===core.length,calories,calTarget};
   }
 
   function streak(data){
@@ -78,7 +85,7 @@
       </div>
       <div class="discipline-subgrid">
         <div class="discipline-mini"><small>MOVIMENTO</small><b>${flagTotal?`${flagDone}/${flagTotal} flag`:`${sportMinutes} min`}</b><span>${sportGoal?`${sportMinutes}/${sportGoal} min questa settimana`:'questa settimana'}</span></div>
-        <div class="discipline-mini"><small>CRESCITA</small><b>${booksGoal?`${books}/${booksGoal}`:`${books} libri`}</b><span>letti nel ${new Date().getFullYear()}</span></div>
+        <div class="discipline-mini"><small>LETTURA</small><b>${booksGoal?`${books}/${booksGoal}`:`${books} libri`}</b><span>letti nel ${new Date().getFullYear()}</span></div>
       </div>
     `;
     stack.prepend(hero);
