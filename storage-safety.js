@@ -19,7 +19,13 @@
           profile: { ...(current.profile || {}), ...(incoming.profile || {}) },
           goals: { ...(current.goals || {}), ...(incoming.goals || {}) }
         };
-        if (Object.prototype.hasOwnProperty.call(current, "books")) merged.books = current.books;
+
+        // These collections/settings are maintained by modules loaded after app.js.
+        // A stale in-memory core save must never erase them.
+        ["books", "weight", "smoking", "meditation"].forEach(k => {
+          if (Object.prototype.hasOwnProperty.call(current, k)) merged[k] = current[k];
+        });
+
         value = JSON.stringify(merged);
       }
     } catch (e) {
