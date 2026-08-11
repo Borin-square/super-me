@@ -10,7 +10,6 @@
   const latest=a=>[...(a||[])].sort((x,y)=>new Date(y.createdAt)-new Date(x.createdAt))[0];
   const sum=(a,k)=>(a||[]).reduce((s,x)=>s+(+x[k]||0),0);
   const pct=(n,d)=>d?Math.max(0,Math.min(100,Math.round(n/d*100))):0;
-  let customMode=null;
 
   function renameNav(){
     const food=$("[data-tab='food']"), sport=$("[data-tab='sport']"), pressure=$("[data-tab='pressure']");
@@ -25,15 +24,11 @@
     const el=$("[data-tab='"+map[which]+"']"); if(el)el.classList.add('active');
   }
 
-  function setHeader(title,kicker){
-    $('#pageTitle').textContent=title;
-    $('#todayLabel').textContent=kicker;
-  }
-
+  function setHeader(title,kicker){ $('#pageTitle').textContent=title; $('#todayLabel').textContent=kicker; }
   function openQuick(){ $('#addBtn')?.click(); }
 
   function renderBody(){
-    customMode='body'; active('body'); setHeader('Corpo','SALUTE & NUTRIZIONE');
+    active('body'); setHeader('Corpo','SALUTE & NUTRIZIONE');
     const d=load(), food=(d.food||[]).filter(x=>isToday(x.createdAt)), bp=latest(d.pressure), w=latest(d.weight);
     const kcal=sum(food,'kcal'), protein=sum(food,'p'), calGoal=num(d.goals?.calories), proteinGoal=num(d.goals?.protein);
     const recentFood=[...(d.food||[])].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,5);
@@ -73,7 +68,7 @@
   }
 
   function renderMovement(){
-    customMode='movement';active('movement');setHeader('Movimento','DISCIPLINA FISICA');
+    active('movement');setHeader('Movimento','DISCIPLINA FISICA');
     const d=load(), rules=flagRows(d), sport=[...(d.sport||[])].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
     const weekly=sport.filter(x=>+new Date(x.createdAt)>=startOfWeek()), mins=sum(weekly,'minutes'), goal=num(d.goals?.sportMinutes), done=rules.reduce((a,x)=>a+x.done,0), total=rules.reduce((a,x)=>a+x.count,0);
     $('#view').innerHTML=`<div class="stack holistic-view">
@@ -86,7 +81,7 @@
   }
 
   function renderGrowth(){
-    customMode='growth';active('growth');setHeader('Crescita','MENTE & CULTURA');
+    active('growth');setHeader('Crescita','MENTE & CULTURA');
     const d=load(), year=new Date().getFullYear(), books=[...(d.books||[])].sort((a,b)=>new Date(b.finishedAt||b.createdAt)-new Date(a.finishedAt||a.createdAt));
     const current=books.filter(b=>{const dt=new Date((b.finishedAt||b.createdAt||'')+(String(b.finishedAt||'').length===10?'T12:00:00':''));return !isNaN(+dt)&&dt.getFullYear()===year}).length, target=num(d.goals?.booksPerYear);
     $('#view').innerHTML=`<div class="stack holistic-view">
@@ -104,15 +99,7 @@
     if(nav.dataset.tab==='food'){e.preventDefault();e.stopImmediatePropagation();renderBody();}
     else if(nav.dataset.tab==='sport'){e.preventDefault();e.stopImmediatePropagation();renderMovement();}
     else if(nav.dataset.tab==='pressure'){e.preventDefault();e.stopImmediatePropagation();renderGrowth();}
-    else if(nav.dataset.tab==='today'){customMode=null;}
   },true);
 
-  const observer=new MutationObserver(()=>{
-    renameNav();
-    if(customMode==='body' && $('#pageTitle')?.textContent!=='Corpo') renderBody();
-    if(customMode==='movement' && $('#pageTitle')?.textContent!=='Movimento') renderMovement();
-    if(customMode==='growth' && $('#pageTitle')?.textContent!=='Crescita') renderGrowth();
-  });
-  observer.observe(document.body,{childList:true,subtree:true});
   renameNav();
 })();
