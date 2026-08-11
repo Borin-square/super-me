@@ -10,12 +10,101 @@ function extractOutputText(data) {
   return "";
 }
 
-function cleanJson(text) {
-  return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+const schema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["kind", "food", "sport", "pressure"],
+  properties: {
+    kind: { type: "string", enum: ["food", "sport", "pressure"] },
+    food: {
+      type: "object",
+      additionalProperties: false,
+      required: ["meal", "title", "kcal", "p", "c", "f", "estimated"],
+      properties: {
+        meal: { type: "string", enum: ["Colazione", "Pranzo", "Cena", "Snack", ""] },
+        title: { type: "string" },
+        kcal: { type: "number" },
+        p: { type: "number" },
+        c: { type: "number" },
+        f: { type: "number" },
+        estimated: { type: "boolean" }
+      }
+    },
+    sport: {
+      type: "object",
+      additionalProperties: false,
+      required: ["type", "minutes", "distance", "elevation", "intensity", "kcal"],
+      properties: {
+        type: { type: "string", enum: ["Bici", "Corsa", "Calisthenics", "Camminata", "Calcio", ""] },
+        minutes: { type: "number" },
+        distance: { type: "number" },
+        elevation: { type: "number" },
+        intensity: { type: "string", enum: ["bassa", "media", "alta", ""] },
+        kcal: { type: "number" }
+      }
+    },
+    pressure: {
+      type: "object",
+      additionalProperties: false,
+      required: ["sys", "dia", "pulse", "context"],
+      properties: {
+        sys: { type: "number" },
+        dia: { type: "number" },
+        pulse: { type: "number" },
+        context: { type: "string", enum: ["riposo", "mattina", "sera", "post-caffè", "post-sport", "altro", ""] }
+      }
+    }
+  }
+};
+
+function validateAndFlatten(parsed) {
+  if (!parsed || !["food", "sport", "pressure"].includes(parsed.kind)) {
+    throw new Error("Categoria non riconosciuta");
+  }
+
+  if (parsed.kind === "food") {
+    const x = parsed.food;
+    if (!x.title || x.kcal < 0 || x.p < 0 || x.c < 0 || x.f < 0) throw new Error("Dati cibo non validi");
+    return {
+      kind: "food",
+      meal: x.meal || "Snack",
+      title: x.title,
+      kcal: Math.round(x.kcal),
+      p: Math.round(x.p * 10) / 10,
+      c: Math.round(x.c * 10) / 10,
+      f: Math.round(x.f * 10) / 10,
+      estimated: true
+    };
+  }
+
+  if (parsed.kind === "sport") {
+    const x = parsed.sport;
+    if (!x.type || x.minutes <= 0) throw new Error("Dati sport non validi");
+    return {
+      kind: "sport",
+      type: x.type,
+      minutes: Math.round(x.minutes),
+      distance: x.distance > 0 ? x.distance : null,
+      elevation: x.elevation > 0 ? Math.round(x.elevation) : null,
+      intensity: x.intensity || "media",
+      kcal: x.kcal > 0 ? Math.round(x.kcal) : 0
+    };
+  }
+
+  const x = parsed.pressure;
+  if (x.sys <= 0 || x.dia <= 0) throw new Error("Dati pressione non validi");
+  return {
+    kind: "pressure",
+    sys: Math.round(x.sys),
+    dia: Math.round(x.dia),
+    pulse: x.pulse > 0 ? Math.round(x.pulse) : null,
+    context: x.context || "riposo"
+  };
 }
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+
   const key = process.env.OPENAI_API_KEY;
   if (!key) return json(res, 503, { error: "OPENAI_API_KEY non configurata su Vercel" });
 
@@ -23,57 +112,71 @@ export default async function handler(req, res) {
     const { text = "", imageDataUrl = "" } = req.body || {};
     if (!text && !imageDataUrl) return json(res, 400, { error: "Manca testo o immagine" });
 
-    const prompt = `Sei il motore di interpretazione di Super Me, app personale italiana per cibo, sport e pressione.
-Restituisci ESCLUSIVAMENTE un singolo oggetto JSON valido, senza markdown.
+    const instructions = `Sei il parser di Super Me. Devi trasformare un singolo input dell'utente in UNA SOLA categoria: food, sport oppure pressure.
 
-Scegli kind fra: "food", "sport", "pressure".
+REGOLE FERREE:
+1. Non inventare categorie diverse da food, sport, pressure.
+2. Compila sempre tutte e tre le sezioni richieste dallo schema, ma valorizza con dati reali solo la sezione indicata da kind. Nelle altre usa stringhe vuote, false e 0.
+3. Non aggiungere commenti, diagnosi, consigli o testo libero fuori dai campi dello schema.
+4. Se l'utente parla di mangiare/bere o invia la foto di un piatto: kind=food.
+5. Se parla di allenamento, bici, MTB, corsa, camminata, calcio o calisthenics: kind=sport.
+6. Se comunica valori come 135 su 85, sistolica/diastolica o battito: kind=pressure.
+7. FOOD: title deve descrivere in modo sintetico alimenti e quantità note o stimate. Stima kcal e macro in modo realistico; p/c/f sono grammi totali del pasto. meal deve essere Colazione, Pranzo, Cena o Snack. Se il momento del pasto non è deducibile, scegli in base al contesto temporale fornito; altrimenti Snack.
+8. SPORT: usa esclusivamente Bici, Corsa, Calisthenics, Camminata o Calcio. MTB/ciclismo= Bici. calistenics/calisthenics=Calisthenics. minutes è obbligatorio. Se distanza/dislivello non sono detti usa 0. intensity: bassa/media/alta. kcal è una stima se non esplicitata.
+9. PRESSURE: interpreta sempre 'X su Y' come sys=X e dia=Y. Se il battito non è presente usa 0. context usa riposo salvo indicazioni diverse.
+10. Mantieni fedelmente i numeri esplicitati dall'utente. Non scambiare minuti, chilometri, metri di dislivello, pressione o battito.
 
-FOOD:
-{"kind":"food","meal":"Colazione|Pranzo|Cena|Snack","title":"descrizione sintetica degli alimenti e porzioni stimate","kcal":numero,"p":grammi proteine,"c":grammi carboidrati,"f":grammi grassi,"estimated":true}
-Se c'è una foto, riconosci ciò che è ragionevolmente visibile, stima le porzioni e i condimenti plausibili senza fingere precisione. Se sei incerto, usa una stima centrale realistica. I macro devono essere coerenti con le kcal.
+Input utente:\n${text || "Analizza la foto del pasto e stima alimenti, quantità, kcal e macronutrienti."}`;
 
-SPORT:
-{"kind":"sport","type":"Bici|Corsa|Calisthenics|Camminata|Calcio","minutes":numero,"distance":numero_o_null,"elevation":numero_o_null,"intensity":"bassa|media|alta","kcal":numero}
-MTB e ciclismo vanno sotto Bici. Calisthenics/calistenics vanno sotto Calisthenics. Stima kcal solo se non sono esplicitate.
-
-PRESSURE:
-{"kind":"pressure","sys":numero,"dia":numero,"pulse":numero_o_null,"context":"riposo|mattina|sera|post-caffè|post-sport|altro"}
-Non fare diagnosi o commenti clinici: estrai soltanto i dati.
-
-Input dell'utente:
-${text || "Analizza la foto del pasto."}`;
-
-    const content = [{ type: "input_text", text: prompt }];
+    const content = [{ type: "input_text", text: instructions }];
     if (imageDataUrl) content.push({ type: "input_image", image_url: imageDataUrl, detail: "auto" });
 
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${key}`,
+        Authorization: `Bearer ${key}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
         model: "gpt-5-mini",
         input: [{ role: "user", content }],
-        max_output_tokens: 800
+        text: {
+          format: {
+            type: "json_schema",
+            name: "super_me_entry",
+            description: "Dato strutturato per Super Me: cibo, sport o pressione.",
+            strict: true,
+            schema
+          }
+        },
+        max_output_tokens: 900,
+        store: false
       })
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      console.error("OpenAI parse error", data);
+      console.error("OpenAI parse error", { status: response.status, data });
       return json(res, response.status, { error: data?.error?.message || "Errore OpenAI" });
     }
 
-    const out = cleanJson(extractOutputText(data));
+    const raw = extractOutputText(data);
+    if (!raw) {
+      console.error("OpenAI empty structured output", data);
+      return json(res, 502, { error: "OpenAI non ha restituito dati interpretabili" });
+    }
+
     try {
-      return json(res, 200, JSON.parse(out));
-    } catch {
-      console.error("Invalid JSON from OpenAI:", out);
-      return json(res, 502, { error: "OpenAI ha restituito dati non validi" });
+      const parsed = JSON.parse(raw);
+      const result = validateAndFlatten(parsed);
+      console.log("Super Me parsed", { kind: result.kind, source: imageDataUrl ? "image" : "text" });
+      return json(res, 200, result);
+    } catch (error) {
+      console.error("Structured output validation error", { message: error?.message, raw });
+      return json(res, 502, { error: `Dati interpretati ma non validi: ${error?.message || "formato errato"}` });
     }
   } catch (error) {
-    console.error(error);
-    return json(res, 500, { error: "Errore interno nell'analisi AI" });
+    console.error("Parser internal error", { message: error?.message, stack: error?.stack });
+    return json(res, 500, { error: error?.message || "Errore interno nell'analisi AI" });
   }
 }
