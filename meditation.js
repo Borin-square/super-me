@@ -1,8 +1,9 @@
 (() => {
-  const KEY="super_me_v1";
+  const KEY="super_me_v1", TIMER_KEY="super_me_meditation_timer";
   const $=s=>document.querySelector(s);
   const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
   const num=v=>Number.isFinite(+v)?+v:0;
+  let timerInterval=null;
 
   function load(){try{return JSON.parse(localStorage.getItem(KEY))||{}}catch{return{}}}
   function save(d){localStorage.setItem(KEY,JSON.stringify(d))}
@@ -10,16 +11,66 @@
   function todayMinutes(d){const k=dayKey(new Date());return (d.meditation||[]).filter(x=>dayKey(x.createdAt)===k).reduce((a,x)=>a+(+x.minutes||0),0)}
   function weekMinutes(d){const start=new Date();const n=(start.getDay()+6)%7;start.setHours(0,0,0,0);start.setDate(start.getDate()-n);return (d.meditation||[]).filter(x=>+new Date(x.createdAt)>=+start).reduce((a,x)=>a+(+x.minutes||0),0)}
   function weekSessions(d){const start=new Date();const n=(start.getDay()+6)%7;start.setHours(0,0,0,0);start.setDate(start.getDate()-n);return (d.meditation||[]).filter(x=>+new Date(x.createdAt)>=+start).length}
+  function timerStart(){return num(localStorage.getItem(TIMER_KEY));}
+  function timerRunning(){return timerStart()>0;}
+  function elapsedSeconds(){const s=timerStart();return s?Math.max(0,Math.floor((Date.now()-s)/1000)):0;}
+  function fmtTimer(sec){const m=Math.floor(sec/60),s=sec%60;return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`}
 
   function ensureData(){const d=load();let changed=false;if(!Array.isArray(d.meditation)){d.meditation=[];changed=true;}d.goals||={};if(d.goals.meditationEnabled==null&&d.goals.meditationEnabledFrom){d.goals.meditationEnabled=true;changed=true;}if(changed)save(d);}
   function enabled(d){return d.goals?.meditationEnabled===true;}
 
+  function saveSession(minutes,source='manual'){
+    if(minutes<1)return false;
+    const data=load();data.meditation||=[];data.meditation.push({id:uid(),minutes:Math.round(minutes),source,createdAt:new Date().toISOString()});save(data);injectBody(true);injectToday(true);return true;
+  }
+
+  function renderTimerState(){
+    const display=$('#medTimerDisplay'),startBtn=$('#medStartTimer'),stopBtn=$('#medStopTimer'),hint=$('#medTimerHint');
+    if(!display)return;
+    const running=timerRunning();display.textContent=fmtTimer(elapsedSeconds());
+    if(startBtn)startBtn.classList.toggle('hidden',running);
+    if(stopBtn)stopBtn.classList.toggle('hidden',!running);
+    if(hint)hint.textContent=running?'Sessione in corso · puoi anche chiudere la scheda':'Avvia il timer e termina quando hai finito';
+  }
+
+  function ensureTimerTick(){
+    if(timerInterval)clearInterval(timerInterval);
+    timerInterval=setInterval(()=>{if(timerRunning())renderTimerState();},1000);
+  }
+
+  function startMeditationTimer(){
+    if(timerRunning())return;
+    localStorage.setItem(TIMER_KEY,String(Date.now()));renderTimerState();ensureTimerTick();
+  }
+
+  function stopMeditationTimer(){
+    const sec=elapsedSeconds();
+    localStorage.removeItem(TIMER_KEY);renderTimerState();
+    const minutes=Math.max(1,Math.round(sec/60));
+    if(sec<20){alert('Sessione troppo breve per essere salvata.');return;}
+    saveSession(minutes,'timer');
+    const sheet=$('#sheet'),backdrop=$('#sheetBackdrop');backdrop?.classList.add('hidden');sheet?.classList.add('hidden');
+  }
+
   function openSheet(){
     const d=load(), target=num(d.goals?.meditationMinutes)||10;
     const sheet=$("#sheet"),backdrop=$("#sheetBackdrop"); if(!sheet||!backdrop)return;
-    sheet.innerHTML=`<div class="handle"></div><div class="sheet-head"><h2>Meditazione</h2><p class="muted">Registra la pratica di oggi. Conta la costanza, non la performance.</p></div><div class="goal-card"><div class="field"><label>MINUTI</label><input id="medMinutes" type="number" min="1" max="180" step="1" inputmode="numeric" value="${target}"></div></div><button class="btn btn-primary" id="saveMeditation" style="margin-top:12px">Salva pratica</button>`;
+    sheet.innerHTML=`<div class="handle"></div><div class="sheet-head"><h2>Meditazione</h2><p class="muted">Avvia una sessione oppure registra i minuti manualmente.</p></div>
+      <div class="goal-card" style="text-align:center">
+        <div class="muted small">SESSIONE</div>
+        <div id="medTimerDisplay" style="font-size:52px;font-weight:850;letter-spacing:-.06em;margin:10px 0 4px">00:00</div>
+        <div id="medTimerHint" class="tiny muted">Avvia il timer e termina quando hai finito</div>
+        <button class="btn btn-primary" id="medStartTimer" style="margin-top:16px">▶ Avvia sessione</button>
+        <button class="btn btn-danger hidden" id="medStopTimer" style="margin-top:16px">■ Termina e salva</button>
+      </div>
+      <div class="section-title" style="margin-top:18px">Oppure inserisci manualmente</div>
+      <div class="goal-card" style="margin-top:8px"><div class="field"><label>MINUTI</label><input id="medMinutes" type="number" min="1" max="180" step="1" inputmode="numeric" value="${target}"></div></div>
+      <button class="btn btn-secondary" id="saveMeditation" style="margin-top:12px">Salva minuti manualmente</button>`;
     backdrop.classList.remove('hidden');sheet.classList.remove('hidden');
-    $('#saveMeditation')?.addEventListener('click',()=>{const minutes=num($('#medMinutes')?.value);if(minutes<1||minutes>180){alert('Inserisci minuti validi.');return;}const data=load();data.meditation||=[];data.meditation.push({id:uid(),minutes:Math.round(minutes),createdAt:new Date().toISOString()});save(data);backdrop.classList.add('hidden');sheet.classList.add('hidden');injectBody(true);injectToday(true);});
+    $('#medStartTimer')?.addEventListener('click',startMeditationTimer);
+    $('#medStopTimer')?.addEventListener('click',stopMeditationTimer);
+    $('#saveMeditation')?.addEventListener('click',()=>{const minutes=num($('#medMinutes')?.value);if(minutes<1||minutes>180){alert('Inserisci minuti validi.');return;}saveSession(minutes,'manual');backdrop.classList.add('hidden');sheet.classList.add('hidden');});
+    renderTimerState();ensureTimerTick();
   }
 
   function injectBody(force=false){
@@ -27,9 +78,9 @@
     if($('#pageTitle')?.textContent!=='Corpo'){old?.remove();return;}
     const d=load(); if(!enabled(d)){old?.remove();return;}
     const host=$('#view .holistic-view');if(!host)return;if(old&&!force)return;if(old)old.remove();
-    const today=todayMinutes(d), target=num(d.goals?.meditationMinutes)||10, wk=weekMinutes(d), sessions=weekSessions(d);
+    const today=todayMinutes(d), target=num(d.goals?.meditationMinutes)||10, wk=weekMinutes(d), sessions=weekSessions(d),running=timerRunning();
     const card=document.createElement('section');card.id='meditationBodyCard';card.className='card';
-    card.innerHTML=`<div class="row"><div style="display:flex;align-items:center;gap:12px"><div class="hub-icon" style="background:#f3efe4">◉</div><div><div class="muted small">MEDITAZIONE · OGGI</div><div class="metric-sm">${today}/${target} min</div><div class="tiny muted">${sessions} sessioni · ${wk} min questa settimana</div></div></div><button class="chip" id="bodyMeditation">${today>=target?'Aggiungi':'Registra'}</button></div>`;
+    card.innerHTML=`<div class="row"><div style="display:flex;align-items:center;gap:12px"><div class="hub-icon" style="background:#f3efe4">◉</div><div><div class="muted small">MEDITAZIONE · OGGI</div><div class="metric-sm">${running?`● ${fmtTimer(elapsedSeconds())}`:`${today}/${target} min`}</div><div class="tiny muted">${running?'sessione in corso':`${sessions} sessioni · ${wk} min questa settimana`}</div></div></div><button class="chip" id="bodyMeditation">${running?'Apri timer':today>=target?'Aggiungi':'Medita'}</button></div>`;
     const smoke=$('#smokeFreeCard'); if(smoke) smoke.insertAdjacentElement('afterend',card); else {const grid=host.querySelector('.grid2');grid?grid.insertAdjacentElement('afterend',card):host.appendChild(card);}
     $('#bodyMeditation')?.addEventListener('click',openSheet);
   }
@@ -39,16 +90,16 @@
     if($('#pageTitle')?.textContent!=='Super Me'){old?.remove();return;}
     const d=load(); if(!enabled(d)){old?.remove();return;}
     const hero=$('#disciplineHero');if(!hero)return;const missions=hero.querySelector('.discipline-missions');if(!missions)return;if(old&&!force)return;if(old)old.remove();
-    const today=todayMinutes(d), target=num(d.goals?.meditationMinutes)||10, done=today>=target;
+    const today=todayMinutes(d), target=num(d.goals?.meditationMinutes)||10, done=today>=target,running=timerRunning();
     const m=document.createElement('button');m.id='meditationMission';m.type='button';m.className=`discipline-mission discipline-mission-button ${done?'done':''}`;
-    m.innerHTML=`<span class="dm-icon">◉</span><div><b>Meditazione</b><small>${done?`${today} min · pratica fatta`:`${today}/${target} min · completa la pratica`}</small></div><strong>${done?'✓':'○'}</strong>`;
+    m.innerHTML=`<span class="dm-icon">◉</span><div><b>Meditazione</b><small>${running?`Sessione in corso · ${fmtTimer(elapsedSeconds())}`:done?`${today} min · pratica fatta`:`${today}/${target} min · completa la pratica`}</small></div><strong>${done?'✓':running?'●':'○'}</strong>`;
     m.addEventListener('click',openSheet);missions.appendChild(m);
   }
 
   function injectAddShortcut(){
     const sheet=$('#sheet');if(!sheet)return;const old=$('#meditationQuickAction');const d=load();if(!enabled(d)){old?.remove();return;}if(old)return;
     const list=sheet.querySelector('.action-list');if(!list)return;
-    const b=document.createElement('button');b.id='meditationQuickAction';b.className='action';b.innerHTML=`<span class="ico">◉</span><span><b>Meditazione</b><small>Registra i minuti della pratica</small></span>`;b.addEventListener('click',openSheet);list.appendChild(b);
+    const b=document.createElement('button');b.id='meditationQuickAction';b.className='action';b.innerHTML=`<span class="ico">◉</span><span><b>Meditazione</b><small>${timerRunning()?'Riprendi il timer':'Avvia o registra una pratica'}</small></span>`;b.addEventListener('click',openSheet);list.appendChild(b);
   }
 
   function injectGoalField(){
@@ -67,9 +118,10 @@
     save(d);
   }
 
-  ensureData();
+  ensureData();ensureTimerTick();
   const view=$('#view');if(view)new MutationObserver(()=>{injectBody(false);injectToday(false)}).observe(view,{childList:true,subtree:true});
   const sheet=$('#sheet');if(sheet)new MutationObserver(()=>{injectAddShortcut();injectGoalField();}).observe(sheet,{childList:true,subtree:true});
   document.addEventListener('click',e=>{if(e.target.closest('#v2save'))saveGoal();if(e.target.closest("[data-tab='food']"))setTimeout(()=>injectBody(false),0);if(e.target.closest("[data-tab='today']"))setTimeout(()=>injectToday(false),0)},true);
+  setInterval(()=>{if(timerRunning()){injectBody(true);injectToday(true)}},5000);
   setTimeout(()=>{injectBody(false);injectToday(false);injectGoalField();},150);
 })();
