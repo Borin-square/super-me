@@ -70,6 +70,34 @@ function validate(parsed) {
   return {...base,smokingAction:parsed.smokingAction};
 }
 
+async function callParser(key, content, attempt = 1) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-5-mini",
+      input: [{ role: "user", content }],
+      text: { format: { type: "json_schema", name: "super_me_universal_entry_v2", description: "Dato universale strutturato per Super Me.", strict: true, schema } },
+      max_output_tokens: attempt === 1 ? 1200 : 1800,
+      store: false
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || "Errore OpenAI");
+  const raw = extractOutputText(data);
+  if (!raw) throw new Error("OpenAI non ha restituito dati interpretabili");
+  try {
+    return validate(JSON.parse(raw));
+  } catch (error) {
+    if (attempt === 1) {
+      console.warn("Parser output non valido, ritento", { message: error?.message, rawLength: raw.length });
+      return callParser(key, content, 2);
+    }
+    console.error("Parser output non valido anche al retry", { message: error?.message, raw });
+    throw new Error("Non sono riuscito a interpretare correttamente il dato. Riprova una volta.");
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
   const key = process.env.OPENAI_API_KEY;
@@ -80,23 +108,8 @@ export default async function handler(req, res) {
     const instructions = `Sei il parser universale di Super Me. Trasforma un singolo input in UNA SOLA categoria tra: food, sport, pressure, weight, meditation, book, smoking.\n\nREGOLE:\n1. Compila SEMPRE tutti i campi dello schema. Per i campi non pertinenti usa stringa vuota, false o 0.\n2. Non aggiungere diagnosi, consigli o testo fuori dallo schema.\n3. FOOD: cibo/bevande o foto di un pasto. Stima titolo, kcal e macro totali. meal = Colazione/Pranzo/Cena/Snack.\n4. SPORT: Bici, Corsa, Calisthenics, Camminata, Calcio. MTB/ciclismo=Bici. minutes obbligatorio. Se l'utente dichiara esplicitamente le calorie consumate, mantieni quel numero e imposta kcalExplicit=true. Se non dichiara calorie, kcalExplicit=false e kcal può essere 0: l'app farà la stima con peso, durata e intensità.\n5. PRESSURE: valori di pressione o foto di un misuratore. 'X su Y' => sys=X dia=Y. pulse se visibile/detto.\n6. WEIGHT: peso corporeo detto dall'utente o foto di una bilancia. weight in kg. Non confondere peso alimenti con peso corporeo.\n7. MEDITATION: una pratica già svolta, es. 'ho meditato 12 minuti'. minutes è durata effettiva.\n8. BOOK: libro letto/finito/da registrare o foto nitida di una copertina. title e author se riconoscibili.\n9. SMOKING: 'ho fumato' => smokingAction=smoked. 'ho smesso oggi'/'riparto da oggi' => smokingAction=quit_start.\n10. FOTO: Piatto=>food; bilancia=>weight; sfigmomanometro=>pressure; copertina libro=>book. Per weight e pressure non inventare numeri non leggibili.\n11. Mantieni fedelmente i numeri esplicitati.\n\nInput utente:\n${text || "Analizza la foto e identifica quale dato personale l'utente sta registrando."}`;
     const content = [{ type: "input_text", text: instructions }];
     if (imageDataUrl) content.push({ type: "input_image", image_url: imageDataUrl, detail: "auto" });
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "gpt-5-mini",
-        input: [{ role: "user", content }],
-        text: { format: { type: "json_schema", name: "super_me_universal_entry_v2", description: "Dato universale strutturato per Super Me.", strict: true, schema } },
-        max_output_tokens: 1000,
-        store: false
-      })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) return json(res, response.status, { error: data?.error?.message || "Errore OpenAI" });
-    const raw = extractOutputText(data);
-    if (!raw) return json(res, 502, { error: "OpenAI non ha restituito dati interpretabili" });
-    try { return json(res, 200, validate(JSON.parse(raw))); }
-    catch (error) { return json(res, 502, { error: `Dati interpretati ma non validi: ${error?.message || "formato errato"}` }); }
+    const result = await callParser(key, content, 1);
+    return json(res, 200, result);
   } catch (error) {
     console.error("Parser v2 internal error", { message: error?.message, stack: error?.stack });
     return json(res, 500, { error: error?.message || "Errore interno nell'analisi AI" });
