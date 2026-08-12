@@ -1,4 +1,4 @@
-const CACHE = "super-me-v2-12";
+const CACHE = "super-me-v2-13";
 const ASSETS = [
   "/",
   "/index.html",
@@ -21,8 +21,8 @@ const ASSETS = [
   "/body-card-click.js",
   "/drive-backup-ui.js",
   "/manifest.json",
-  "/icon-192.svg",
-  "/icon-512.svg"
+  "/icon-superme-v2-192.svg",
+  "/icon-superme-v2-512.svg"
 ];
 
 self.addEventListener("install", event => {
