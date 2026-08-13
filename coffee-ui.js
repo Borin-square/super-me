@@ -5,6 +5,7 @@
   const save=d=>localStorage.setItem(KEY,JSON.stringify(d));
   const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
   const isToday=iso=>iso&&new Date(iso).toDateString()===new Date().toDateString();
+  let renderQueued=false;
 
   function todayCount(d){return (d.coffee||[]).filter(x=>isToday(x.createdAt)).length;}
 
@@ -27,22 +28,53 @@
     const wrap=document.createElement('div');wrap.id='coffeeGoalField';wrap.className='field';wrap.innerHTML=`<label>CAFFÈ MAX / GIORNO</label><input id="coffeeGoalValue" type="number" min="0" max="20" value="${goal}">`;
     health.appendChild(wrap);
     const saveBtn=sheet.querySelector('#v2save');
-    if(saveBtn&&!saveBtn.dataset.coffeeBound){saveBtn.dataset.coffeeBound='1';saveBtn.addEventListener('click',()=>{const data=load();data.goals||={};const v=+$('#coffeeGoalValue')?.value;data.goals.coffeeMax=v>0?v:null;save(data);},true);}
+    if(saveBtn&&!saveBtn.dataset.coffeeBound){
+      saveBtn.dataset.coffeeBound='1';
+      saveBtn.addEventListener('click',()=>{
+        const data=load();data.goals||={};const v=+$('#coffeeGoalValue')?.value;data.goals.coffeeMax=v>0?v:null;save(data);
+      },true);
+    }
+  }
+
+  function cardHtml(count,goal){
+    const over=goal&&count>goal,at=goal&&count===goal;
+    return `<div class="row"><div><div class="muted small">☕ CAFFÈ · OGGI</div><div id="coffeeCount" style="font-size:20px;font-weight:850;margin-top:2px">${count}${goal?` / ${goal}`:''}</div></div><div style="display:flex;gap:8px"><button class="chip" id="coffeeMinus" ${count?'':'disabled'}>−1</button><button class="chip" id="coffeePlus">+1</button></div></div><div id="coffeeNote" class="tiny muted" style="margin-top:6px;${goal?'':'display:none'}">${goal?(over?`Sei oltre di ${count-goal}.`:at?'Hai raggiunto il limite di oggi.':`Te ne ${goal-count===1?'resta':'restano'} ${goal-count}.`):''}</div>`;
+  }
+
+  function bindCard(card){
+    card.querySelector('#coffeePlus')?.addEventListener('click',addCoffee);
+    card.querySelector('#coffeeMinus')?.addEventListener('click',removeLastCoffee);
   }
 
   function render(){
-    const old=$('#coffeeDailyCard');if(old)old.remove();
-    if($('#pageTitle')?.textContent!=='Corpo')return;
-    const d=load(),count=todayCount(d),goal=+d.goals?.coffeeMax||0;
+    renderQueued=false;
+    const existing=$('#coffeeDailyCard');
+    if($('#pageTitle')?.textContent!=='Corpo'){
+      existing?.remove();
+      return;
+    }
     const host=$('#view .body-hero');if(!host)return;
-    const card=document.createElement('div');card.id='coffeeDailyCard';card.style.cssText='margin-top:12px;padding-top:12px;border-top:1px solid #eee8df';
-    const over=goal&&count>goal,at=goal&&count===goal;
-    card.innerHTML=`<div class="row"><div><div class="muted small">☕ CAFFÈ · OGGI</div><div style="font-size:20px;font-weight:850;margin-top:2px">${count}${goal?` / ${goal}`:''}</div></div><div style="display:flex;gap:8px"><button class="chip" id="coffeeMinus" ${count?'':'disabled'}>−1</button><button class="chip" id="coffeePlus">+1</button></div></div>${goal?`<div class="tiny muted" style="margin-top:6px">${over?`Sei oltre di ${count-goal}.`:at?'Hai raggiunto il limite di oggi.':`Te ne ${goal-count===1?'resta':'restano'} ${goal-count}.`}</div>`:''}`;
-    host.appendChild(card);
-    $('#coffeePlus')?.addEventListener('click',addCoffee);$('#coffeeMinus')?.addEventListener('click',removeLastCoffee);
+    const d=load(),count=todayCount(d),goal=+d.goals?.coffeeMax||0;
+
+    if(!existing){
+      const card=document.createElement('div');card.id='coffeeDailyCard';card.style.cssText='margin-top:12px;padding-top:12px;border-top:1px solid #eee8df';
+      card.innerHTML=cardHtml(count,goal);host.appendChild(card);bindCard(card);return;
+    }
+
+    if(existing.parentNode!==host){host.appendChild(existing);}
+    const currentSignature=`${count}|${goal}`;
+    if(existing.dataset.signature===currentSignature)return;
+    existing.dataset.signature=currentSignature;
+    existing.innerHTML=cardHtml(count,goal);bindCard(existing);
   }
 
-  new MutationObserver(()=>{render();injectGoal();}).observe(document.body,{childList:true,subtree:true});
-  setTimeout(()=>{render();injectGoal();},250);
+  function schedule(){
+    if(renderQueued)return;
+    renderQueued=true;
+    requestAnimationFrame(()=>{render();injectGoal();});
+  }
+
+  new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true});
+  setTimeout(schedule,250);
   window.SuperMeCoffee={add:addCoffee,removeLast:removeLastCoffee};
 })();
