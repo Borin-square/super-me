@@ -1,4 +1,4 @@
-const CACHE = "super-me-v2-20";
+const CACHE = "super-me-v2-21";
 const ASSETS = [
   "/",
   "/index.html",
@@ -24,6 +24,7 @@ const ASSETS = [
   "/entry-manager.js",
   "/smart-message.js",
   "/discipline-30.js",
+  "/salt-ui.js",
   "/manifest.json",
   "/icon-superme-v2-192.svg",
   "/icon-superme-v2-512.svg"
@@ -48,29 +49,10 @@ self.addEventListener("fetch", event => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.pathname.startsWith("/api/")) return;
-
   const isNavigation = req.mode === "navigate" || url.pathname === "/" || url.pathname === "/index.html";
-
   if (isNavigation) {
-    event.respondWith(
-      fetch(req)
-        .then(response => {
-          const copy = response.clone();
-          caches.open(CACHE).then(cache => cache.put(req, copy));
-          return response;
-        })
-        .catch(() => caches.match(req).then(r => r || caches.match("/index.html")))
-    );
+    event.respondWith(fetch(req).then(response => {const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(req,copy));return response;}).catch(()=>caches.match(req).then(r=>r||caches.match("/index.html"))));
     return;
   }
-
-  event.respondWith(
-    fetch(req)
-      .then(response => {
-        const copy = response.clone();
-        caches.open(CACHE).then(cache => cache.put(req, copy));
-        return response;
-      })
-      .catch(() => caches.match(req))
-  );
+  event.respondWith(fetch(req).then(response=>{const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(req,copy));return response;}).catch(()=>caches.match(req)));
 });
