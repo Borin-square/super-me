@@ -1,4 +1,4 @@
-const CACHE = "super-me-v2-22";
+const CACHE = "super-me-v2-23";
 const ASSETS = [
   "/",
   "/index.html",
@@ -25,6 +25,7 @@ const ASSETS = [
   "/smart-message.js",
   "/discipline-30.js",
   "/salt-ui.js",
+  "/coffee-ui.js",
   "/manifest.json",
   "/icon-superme-v2-192.svg",
   "/icon-superme-v2-512.svg"
@@ -36,12 +37,10 @@ self.addEventListener("install", event => {
 });
 
 self.addEventListener("activate", event => {
-  event.waitUntil(
-    Promise.all([
-      caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))),
-      self.clients.claim()
-    ])
-  );
+  event.waitUntil(Promise.all([
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))),
+    self.clients.claim()
+  ]));
 });
 
 self.addEventListener("fetch", event => {
