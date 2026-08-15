@@ -61,7 +61,7 @@
     const d=load(),title=$('#pageTitle')?.textContent;
     if(title==='Corpo'){const food=[...(d.food||[])].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,5);decorateList('#view .section-title + .list-group .entry-card',food,'food');}
     if(title==='Movimento'){const sport=[...(d.sport||[])].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,10);decorateList('#view .section-title + .list-group .entry-card',sport,'sport');}
-    const sh=$('#sheet'];
+    const sh=$('#sheet');
     if(sh?.querySelector('#healthWeightChart')){const rows=[...(d.weight||[])].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,16);decorateList('#sheet .list-group .entry-card',rows,'weight');}
     else if(sh?.querySelector('#healthPressureChart')){const rows=[...(d.pressure||[])].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,16);decorateList('#sheet .list-group .entry-card',rows,'pressure');}
   }
