@@ -1,4 +1,4 @@
-const CACHE = "super-me-v2-27";
+const CACHE = "super-me-v2-28";
 const ASSETS = [
   "/",
   "/index.html",
@@ -26,6 +26,7 @@ const ASSETS = [
   "/movement-calories.js",
   "/smart-message.js",
   "/discipline-30.js",
+  "/weekly-recap.js",
   "/salt-ui.js",
   "/coffee-ui.js",
   "/manifest.json",
