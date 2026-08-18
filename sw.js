@@ -1,4 +1,4 @@
-const CACHE = "super-me-v2-30";
+const CACHE = "super-me-v2-31";
 const ASSETS = [
   "/",
   "/index.html",
@@ -29,8 +29,8 @@ const ASSETS = [
   "/salt-ui.js",
   "/coffee-ui.js",
   "/manifest.json",
-  "/icon-superme-v2-192.svg",
-  "/icon-superme-v2-512.svg"
+  "/icon-superme-v3-192.svg",
+  "/icon-superme-v3-512.svg"
 ];
 
 self.addEventListener("install", event => {
